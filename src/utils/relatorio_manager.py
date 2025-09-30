@@ -11,16 +11,40 @@ from datetime import datetime
 from pathlib import Path
 import sys
 
-# Adiciona o diretório config ao path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'config'))
-import config
+# Import do config
+try:
+    import config
+except ImportError:
+    try:
+        # Adiciona o diretório config ao path
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'config'))
+        import config
+    except ImportError:
+        # Fallback para executável
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config'))
+        import config
 
 class RelatorioManager:
     """Gerenciador para organização de relatórios"""
     
     def __init__(self):
-        self.base_dir = config.DIRETORIO_RELATORIOS
-        self.estrutura = config.ESTRUTURA_RELATORIOS
+        # Verifica se o config tem os atributos necessários
+        if hasattr(config, 'DIRETORIO_RELATORIOS'):
+            self.base_dir = config.DIRETORIO_RELATORIOS
+        else:
+            # Fallback para diretório padrão
+            self.base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'relatorios')
+        
+        if hasattr(config, 'ESTRUTURA_RELATORIOS'):
+            self.estrutura = config.ESTRUTURA_RELATORIOS
+        else:
+            # Estrutura padrão
+            self.estrutura = {
+                "por_ano": True,
+                "por_mes": True,
+                "por_tipo": True
+            }
+        
         self._criar_estrutura()
     
     def _criar_estrutura(self):
@@ -29,10 +53,12 @@ class RelatorioManager:
             # Cria diretório base
             os.makedirs(self.base_dir, exist_ok=True)
             
-            # Cria subpastas
-            for pasta in self.estrutura.values():
-                caminho_completo = os.path.join(os.path.dirname(self.base_dir), pasta)
-                os.makedirs(caminho_completo, exist_ok=True)
+            # Cria subpastas apenas se a estrutura for um dicionário com strings
+            if isinstance(self.estrutura, dict):
+                for chave, valor in self.estrutura.items():
+                    if isinstance(valor, str):
+                        caminho_completo = os.path.join(self.base_dir, valor)
+                        os.makedirs(caminho_completo, exist_ok=True)
                 
         except Exception as e:
             print(f"Erro ao criar estrutura de relatórios: {e}")

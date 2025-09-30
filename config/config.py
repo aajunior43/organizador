@@ -4,8 +4,20 @@ Configurações do Organizador de Extratos
 """
 
 # Configurações de Diretórios
-DIRETORIO_BASE_PADRAO = r"c:\Users\Administrator\Desktop\RENOMER\extratos"
-DIRETORIO_DESTINO_PADRAO = r"c:\Users\Administrator\Desktop\RENOMER\ORGANIZADO"
+import os
+import sys
+
+# Obtém o diretório base do executável ou script
+if getattr(sys, 'frozen', False):
+    # Se estiver rodando como executável
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    # Se estiver rodando como script Python
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Diretórios padrão - serão selecionados pelo usuário na interface
+DIRETORIO_BASE_PADRAO = None  # Será selecionado pelo usuário
+DIRETORIO_DESTINO_PADRAO = None  # Será selecionado pelo usuário
 
 # Configurações de Nomenclatura
 ANO_PADRAO = "2025"
@@ -75,7 +87,7 @@ ABRIR_RELATORIO_AUTOMATICAMENTE = True
 NOME_RELATORIO_HTML = "relatorio_organizacao.html"
 
 # Estrutura de Pastas para Relatórios
-DIRETORIO_RELATORIOS = r"c:\Users\Administrator\Desktop\RENOMER\relatorios"
+DIRETORIO_RELATORIOS = os.path.join(BASE_DIR, "relatorios")
 ESTRUTURA_RELATORIOS = {
     "html": "relatorios/html",           # Relatórios HTML
     "json": "relatorios/json",           # Relatórios JSON

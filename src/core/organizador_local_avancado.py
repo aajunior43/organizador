@@ -175,7 +175,7 @@ class OrganizadorLocalAvancado:
         conteudo = f"{texto}|{contexto}"
         return hashlib.md5(conteudo.encode()).hexdigest()
 
-    def detectar_data(self, texto: str, caminho_completo: str = "") -> Dict:
+    def detectar_data(self, texto: str, caminho_completo: str = "", arquivo_path: str = "") -> Dict:
         """Detecta mês e ano no texto usando múltiplos padrões com cache"""
         # Verifica cache
         cache_key = self._gerar_cache_key(texto, caminho_completo)
@@ -271,6 +271,18 @@ class OrganizadorLocalAvancado:
         if ano and not (2020 <= int(ano) <= 2030):
             ano = None
 
+        # 4. Se não encontrou data e é arquivo OFX, tenta analisar conteúdo
+        if (not mes or not ano) and arquivo_path and arquivo_path.lower().endswith('.ofx'):
+            try:
+                data_ofx = self._analisar_conteudo_ofx(arquivo_path)
+                if data_ofx:
+                    if not mes and data_ofx.get('mes'):
+                        mes = data_ofx['mes']
+                    if not ano and data_ofx.get('ano'):
+                        ano = data_ofx['ano']
+            except Exception as e:
+                self.logger.debug(f"Erro ao analisar conteúdo OFX {arquivo_path}: {e}")
+
         resultado = {
             'mes': mes,
             'ano': ano,
@@ -351,6 +363,82 @@ class OrganizadorLocalAvancado:
 
         return resultado
 
+    def _analisar_conteudo_ofx(self, arquivo_path: str) -> Dict:
+        """Analisa o conteúdo de um arquivo OFX para extrair informações de data"""
+        try:
+            with open(arquivo_path, 'r', encoding='utf-8', errors='ignore') as f:
+                conteudo = f.read(2048)  # Lê apenas os primeiros 2KB para performance
+            
+            mes = None
+            ano = None
+            
+            # Padrões específicos para arquivos OFX
+            padroes_ofx = {
+                # Data no formato YYYYMMDD (comum em OFX)
+                'dtstart': re.compile(r'<DTSTART>(\d{8})', re.IGNORECASE),
+                'dtend': re.compile(r'<DTEND>(\d{8})', re.IGNORECASE),
+                'dtserver': re.compile(r'<DTSERVER>(\d{8})', re.IGNORECASE),
+                'dtacctup': re.compile(r'<DTACCTUP>(\d{8})', re.IGNORECASE),
+                # Data no formato YYYYMMDDHHMMSS
+                'dtstart_full': re.compile(r'<DTSTART>(\d{4})(\d{2})(\d{2})\d{6}', re.IGNORECASE),
+                'dtend_full': re.compile(r'<DTEND>(\d{4})(\d{2})(\d{2})\d{6}', re.IGNORECASE),
+                'dtserver_full': re.compile(r'<DTSERVER>(\d{4})(\d{2})(\d{2})\d{6}', re.IGNORECASE),
+                # Período de extrato
+                'periodo': re.compile(r'(\d{1,2})[\/\-](\d{4})', re.IGNORECASE),
+                # Data em formato brasileiro
+                'data_br': re.compile(r'(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})', re.IGNORECASE),
+            }
+            
+            # Tenta extrair data dos campos OFX
+            for padrao_nome, padrao in padroes_ofx.items():
+                match = padrao.search(conteudo)
+                if match:
+                    if padrao_nome in ['dtstart', 'dtend', 'dtserver', 'dtacctup']:
+                        # Formato YYYYMMDD
+                        data_str = match.group(1)
+                        if len(data_str) == 8:
+                            ano_encontrado = data_str[:4]
+                            mes_encontrado = data_str[4:6]
+                            if 2020 <= int(ano_encontrado) <= 2030 and 1 <= int(mes_encontrado) <= 12:
+                                ano = ano_encontrado
+                                mes = mes_encontrado.zfill(2)
+                                break
+                    elif padrao_nome in ['dtstart_full', 'dtend_full', 'dtserver_full']:
+                        # Formato YYYYMMDDHHMMSS
+                        ano_encontrado = match.group(1)
+                        mes_encontrado = match.group(2)
+                        if 2020 <= int(ano_encontrado) <= 2030 and 1 <= int(mes_encontrado) <= 12:
+                            ano = ano_encontrado
+                            mes = mes_encontrado.zfill(2)
+                            break
+                    elif padrao_nome == 'periodo':
+                        # MM/YYYY
+                        mes_encontrado = match.group(1).zfill(2)
+                        ano_encontrado = match.group(2)
+                        if 1 <= int(mes_encontrado) <= 12 and 2020 <= int(ano_encontrado) <= 2030:
+                            mes = mes_encontrado
+                            ano = ano_encontrado
+                            break
+                    elif padrao_nome == 'data_br':
+                        # DD/MM/YYYY
+                        dia = match.group(1)
+                        mes_encontrado = match.group(2).zfill(2)
+                        ano_encontrado = match.group(3)
+                        if 1 <= int(mes_encontrado) <= 12 and 2020 <= int(ano_encontrado) <= 2030:
+                            mes = mes_encontrado
+                            ano = ano_encontrado
+                            break
+            
+            return {
+                'mes': mes,
+                'ano': ano,
+                'encontrado': bool(mes and ano)
+            }
+            
+        except Exception as e:
+            self.logger.debug(f"Erro ao analisar conteúdo OFX: {e}")
+            return {}
+
     def processar_arquivo(self, arquivo: Path, modo_teste: bool = True) -> Dict:
         """Processa um arquivo individual com validações robustas"""
         resultado = {
@@ -382,7 +470,7 @@ class OrganizadorLocalAvancado:
             self.logger.info(f"Processando: {arquivo.name}")
 
             # Detecta data - passa caminho completo para detectar ano
-            deteccao_data = self.detectar_data(arquivo.name, str(arquivo.parent))
+            deteccao_data = self.detectar_data(arquivo.name, str(arquivo.parent), str(arquivo))
 
             # Detecta conta
             deteccao_conta = self.detectar_conta(arquivo.name)

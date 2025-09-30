@@ -15,9 +15,19 @@ from datetime import datetime
 import webbrowser
 import subprocess
 
-# Adiciona o diretório utils ao path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'utils'))
-from relatorio_manager import relatorio_manager
+# Import do RelatorioManager
+try:
+    from relatorio_manager import RelatorioManager
+except ImportError:
+    try:
+        from src.utils.relatorio_manager import RelatorioManager
+    except ImportError:
+        # Adiciona o diretório utils ao path se não encontrar
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'utils'))
+        from relatorio_manager import RelatorioManager
+
+# Cria instância do gerenciador de relatórios
+relatorio_manager = RelatorioManager()
 
 class InterfaceComSeletor:
     def __init__(self):
@@ -345,6 +355,14 @@ class InterfaceComSeletor:
         self.btn_organizar.config(state='normal')
         self.processando = False
 
+    def _import_with_path_fallback(self):
+        """Método auxiliar para importação com fallback de path"""
+        # Adiciona o diretório core ao path
+        core_path = os.path.join(os.path.dirname(__file__), '..', 'core')
+        if core_path not in sys.path:
+            sys.path.insert(0, core_path)
+        return __import__('organizador_local_avancado', fromlist=['OrganizadorLocalAvancado'])
+
     def executar_organizador(self, modo_teste=False):
         """Executa o organizador"""
         if not self.validar_pastas():
@@ -357,7 +375,29 @@ class InterfaceComSeletor:
         def run():
             self.bloquear_botoes()
             try:
-                from core.organizador_local_avancado import OrganizadorLocalAvancado
+                # Import com fallback robusto para executável
+                organizador_class = None
+                
+                # Tenta importar de diferentes formas
+                import_attempts = [
+                    # Para executável PyInstaller
+                    lambda: __import__('organizador_local_avancado', fromlist=['OrganizadorLocalAvancado']),
+                    # Para desenvolvimento
+                    lambda: __import__('src.core.organizador_local_avancado', fromlist=['OrganizadorLocalAvancado']),
+                    # Fallback com path absoluto
+                    lambda: self._import_with_path_fallback()
+                ]
+                
+                for attempt in import_attempts:
+                    try:
+                        module = attempt()
+                        organizador_class = getattr(module, 'OrganizadorLocalAvancado')
+                        break
+                    except (ImportError, AttributeError):
+                        continue
+                
+                if organizador_class is None:
+                    raise ImportError("Não foi possível importar OrganizadorLocalAvancado")
 
                 origem = self.pasta_origem.get()
                 destino = self.pasta_destino.get()
@@ -367,7 +407,7 @@ class InterfaceComSeletor:
                 self.adicionar_status(f"Destino: {destino}")
                 self.adicionar_status(f"Modo: {'TESTE' if modo_teste else 'REAL'}")
 
-                organizador = OrganizadorLocalAvancado(origem, destino)
+                organizador = organizador_class(origem, destino)
                 relatorio = organizador.organizar_arquivos(modo_teste=modo_teste)
 
                 # Salva relatório na nova estrutura
@@ -413,7 +453,16 @@ class InterfaceComSeletor:
         def run():
             self.bloquear_botoes()
             try:
-                from core.organizador_local_avancado import OrganizadorLocalAvancado
+                # Import com fallback para executável
+                try:
+                    from core.organizador_local_avancado import OrganizadorLocalAvancado
+                except ImportError:
+                    try:
+                        from src.core.organizador_local_avancado import OrganizadorLocalAvancado
+                    except ImportError:
+                        # Adiciona o diretório core ao path
+                        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'core'))
+                        from organizador_local_avancado import OrganizadorLocalAvancado
 
                 origem = self.pasta_origem.get()
                 destino = self.pasta_destino.get()

@@ -46,3 +46,10 @@ nul
 *.bak
 *.backup
 *~
+
+# Executáveis (permitir apenas o portátil)
+*.exe
+!dist/RENOMER_Portable.exe
+
+# Build temporários
+build/
