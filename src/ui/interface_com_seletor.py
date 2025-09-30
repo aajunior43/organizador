@@ -22,9 +22,12 @@ from relatorio_manager import relatorio_manager
 class InterfaceComSeletor:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("Organizador de Extratos - Sistema Local")
-        self.root.geometry("800x600")
+        self.root.title("RENOMER - Organizador de Extratos Bancários")
+        self.root.geometry("900x700")
         self.root.resizable(True, True)
+
+        # Variável para controlar threads
+        self.processando = False
 
         # Variáveis para caminhos
         self.pasta_origem = tk.StringVar()
@@ -99,10 +102,18 @@ class InterfaceComSeletor:
         main_frame.grid_rowconfigure(3, weight=1)
         main_frame.grid_columnconfigure(0, weight=1)
 
-        # Título
-        title_label = ttk.Label(main_frame, text="ORGANIZADOR DE EXTRATOS - SISTEMA LOCAL",
-                               font=('Arial', 16, 'bold'))
-        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
+        # Cabeçalho com informações
+        header_frame = ttk.Frame(main_frame)
+        header_frame.grid(row=0, column=0, columnspan=2, pady=(0, 20), sticky=(tk.W, tk.E))
+
+        title_label = ttk.Label(header_frame, text="RENOMER - ORGANIZADOR DE EXTRATOS",
+                               font=('Arial', 18, 'bold'), foreground='#2E86AB')
+        title_label.grid(row=0, column=0, sticky=tk.W)
+
+        subtitle_label = ttk.Label(header_frame,
+                                   text="Sistema inteligente de organização automática de extratos bancários",
+                                   font=('Arial', 9), foreground='gray')
+        subtitle_label.grid(row=1, column=0, sticky=tk.W, pady=(5, 0))
 
         # Área de seleção de pastas
         self.criar_selecao_pastas(main_frame)
@@ -160,18 +171,29 @@ class InterfaceComSeletor:
         botoes_frame.grid(row=2, column=0, columnspan=2, pady=15)
 
         # Botão 1: SIMULAR (mostra estatísticas)
-        btn_simular = ttk.Button(botoes_frame, text="SIMULAR E VER ESTATISTICAS",
+        self.btn_simular = ttk.Button(botoes_frame, text="🔍 SIMULAR E VER ESTATÍSTICAS",
                                 command=self.simular_organizacao,
-                                width=35,
+                                width=38,
                                 style='Simulation.TButton')
-        btn_simular.grid(row=0, column=0, padx=10, pady=5)
+        self.btn_simular.grid(row=0, column=0, padx=10, pady=5)
 
         # Botão 2: ORGANIZAR (execução real)
-        btn_organizar = ttk.Button(botoes_frame, text="ORGANIZAR EXTRATOS",
+        self.btn_organizar = ttk.Button(botoes_frame, text="✅ ORGANIZAR EXTRATOS",
                                   command=self.organizar_extratos,
-                                  width=35,
+                                  width=38,
                                   style='Action.TButton')
-        btn_organizar.grid(row=0, column=1, padx=10, pady=5)
+        self.btn_organizar.grid(row=0, column=1, padx=10, pady=5)
+
+        # Botão 3: Limpar Log
+        btn_limpar = ttk.Button(botoes_frame, text="🗑️ LIMPAR LOG",
+                               command=self.limpar_status,
+                               width=20)
+        btn_limpar.grid(row=1, column=0, columnspan=2, pady=(10, 0))
+
+    def limpar_status(self):
+        """Limpa a área de status"""
+        self.status_text.delete(1.0, tk.END)
+        self.adicionar_status("Log limpo.")
 
     def criar_status(self, parent):
         """Cria área de status"""
@@ -189,10 +211,19 @@ class InterfaceComSeletor:
         scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.status_text.configure(yscrollcommand=scrollbar.set)
 
+        # Progress bar
+        self.progress_var = tk.DoubleVar()
+        self.progress_bar = ttk.Progressbar(status_frame, variable=self.progress_var, mode='determinate')
+        self.progress_bar.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(10, 0))
+
+        # Label de progresso
+        self.progress_label = ttk.Label(status_frame, text="", font=('Arial', 9))
+        self.progress_label.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=(5, 0))
+
         # Mensagem inicial
-        self.adicionar_status("Sistema Local iniciado. Selecione as pastas e escolha uma acao.")
-        self.adicionar_status("IMPORTANTE: Arquivos serao COPIADOS (originais preservados)")
-        self.adicionar_status("DETECCAO AUTOMATICA de:")
+        self.adicionar_status("✅ Sistema iniciado. Selecione as pastas e escolha uma ação.")
+        self.adicionar_status("📌 IMPORTANTE: Arquivos serão COPIADOS (originais preservados)")
+        self.adicionar_status("🔍 DETECÇÃO AUTOMÁTICA de:")
         self.adicionar_status("  - Datas: 06/2023, JUN/2023, JUNHO, 202306, etc")
         self.adicionar_status("  - Contas: 12345-6, Extrato123456, EXT JUNHO 12345-X")
         self.adicionar_status("  - Estrutura: CONTA_123456/2023_06_JUNHO/")
@@ -216,6 +247,23 @@ class InterfaceComSeletor:
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.status_text.insert(tk.END, f"[{timestamp}] {mensagem}\n")
         self.status_text.see(tk.END)
+        self.root.update()
+
+    def atualizar_progresso(self, atual: int, total: int, mensagem: str = ""):
+        """Atualiza barra de progresso"""
+        if total > 0:
+            percentual = (atual / total) * 100
+            self.progress_var.set(percentual)
+            texto = f"Processando: {atual}/{total} ({percentual:.1f}%)"
+            if mensagem:
+                texto += f" - {mensagem}"
+            self.progress_label.config(text=texto)
+            self.root.update()
+
+    def resetar_progresso(self):
+        """Reseta barra de progresso"""
+        self.progress_var.set(0)
+        self.progress_label.config(text="")
         self.root.update()
 
     def copiar_arquivos_para_destino(self, arquivo_json, arquivo_html, pasta_destino):
@@ -285,12 +333,29 @@ class InterfaceComSeletor:
 
         return True
 
+    def bloquear_botoes(self):
+        """Bloqueia botões durante processamento"""
+        self.btn_simular.config(state='disabled')
+        self.btn_organizar.config(state='disabled')
+        self.processando = True
+
+    def desbloquear_botoes(self):
+        """Desbloqueia botões após processamento"""
+        self.btn_simular.config(state='normal')
+        self.btn_organizar.config(state='normal')
+        self.processando = False
+
     def executar_organizador(self, modo_teste=False):
         """Executa o organizador"""
         if not self.validar_pastas():
             return
 
+        if self.processando:
+            messagebox.showwarning("Processando", "Já existe uma operação em andamento!")
+            return
+
         def run():
+            self.bloquear_botoes()
             try:
                 from core.organizador_local_avancado import OrganizadorLocalAvancado
 
@@ -329,6 +394,8 @@ class InterfaceComSeletor:
 
             except Exception as e:
                 self.adicionar_status(f"ERRO: {str(e)}")
+            finally:
+                self.desbloquear_botoes()
 
         thread = threading.Thread(target=run)
         thread.daemon = True
@@ -339,7 +406,12 @@ class InterfaceComSeletor:
         if not self.validar_pastas():
             return
 
+        if self.processando:
+            messagebox.showwarning("Processando", "Já existe uma operação em andamento!")
+            return
+
         def run():
+            self.bloquear_botoes()
             try:
                 from core.organizador_local_avancado import OrganizadorLocalAvancado
 
@@ -408,6 +480,8 @@ class InterfaceComSeletor:
 
             except Exception as e:
                 self.adicionar_status(f"ERRO na simulacao: {str(e)}")
+            finally:
+                self.desbloquear_botoes()
 
         thread = threading.Thread(target=run)
         thread.daemon = True
@@ -415,6 +489,10 @@ class InterfaceComSeletor:
 
     def organizar_extratos(self):
         """Organiza extratos (modo real) com relatórios automáticos"""
+        if self.processando:
+            messagebox.showwarning("Processando", "Já existe uma operação em andamento!")
+            return
+
         if not messagebox.askyesno("Confirmar Organização",
                                   "Executar ORGANIZACAO REAL?\n\n"
                                   "✓ Arquivos serão COPIADOS (originais preservados)\n"
@@ -423,6 +501,7 @@ class InterfaceComSeletor:
             return
 
         def run():
+            self.bloquear_botoes()
             try:
                 from core.organizador_local_avancado import OrganizadorLocalAvancado
 
@@ -466,6 +545,8 @@ class InterfaceComSeletor:
 
             except Exception as e:
                 self.adicionar_status(f"ERRO na organizacao: {str(e)}")
+            finally:
+                self.desbloquear_botoes()
 
         thread = threading.Thread(target=run)
         thread.daemon = True
@@ -494,7 +575,11 @@ class InterfaceComSeletor:
             return None
 
     def criar_relatorio_html(self, relatorio):
-        """Cria relatório HTML detalhado"""
+        """Cria relatório HTML detalhado e moderno"""
+        taxa_sucesso = 0
+        if relatorio['total_arquivos'] > 0:
+            taxa_sucesso = (relatorio['processados_com_sucesso'] / relatorio['total_arquivos']) * 100
+
         html = f"""
 <!DOCTYPE html>
 <html>
@@ -502,54 +587,88 @@ class InterfaceComSeletor:
     <meta charset="UTF-8">
     <title>Relatório de Organização - {datetime.now().strftime('%d/%m/%Y %H:%M')}</title>
     <style>
-        body {{ font-family: Arial, sans-serif; margin: 20px; }}
-        .header {{ background: #f0f0f0; padding: 20px; border-radius: 5px; }}
-        .stats {{ display: flex; gap: 20px; margin: 20px 0; }}
-        .stat-box {{ background: #e8f4f8; padding: 15px; border-radius: 5px; flex: 1; text-align: center; }}
-        .success {{ background: #d4edda; }}
-        .error {{ background: #f8d7da; }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; padding: 20px; }}
+        .container {{ max-width: 1200px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; }}
+        .header h1 {{ font-size: 28px; margin-bottom: 15px; }}
+        .header p {{ font-size: 14px; opacity: 0.9; margin: 5px 0; }}
+        .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; padding: 30px; }}
+        .stat-box {{ background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; border-left: 4px solid #667eea; }}
+        .stat-box h3 {{ font-size: 36px; color: #2c3e50; margin-bottom: 10px; }}
+        .stat-box p {{ color: #7f8c8d; font-size: 14px; text-transform: uppercase; }}
+        .stat-box.success {{ border-left-color: #27ae60; }}
+        .stat-box.success h3 {{ color: #27ae60; }}
+        .stat-box.error {{ border-left-color: #e74c3c; }}
+        .stat-box.error h3 {{ color: #e74c3c; }}
+        .content {{ padding: 30px; }}
+        .section-title {{ font-size: 20px; color: #2c3e50; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #ecf0f1; }}
         table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-        th {{ background: #f2f2f2; }}
-        .status-success {{ color: green; font-weight: bold; }}
-        .status-error {{ color: red; font-weight: bold; }}
+        th {{ background: #34495e; color: white; padding: 12px; text-align: left; font-weight: 500; }}
+        td {{ border: 1px solid #ecf0f1; padding: 10px; }}
+        tr:nth-child(even) {{ background: #f8f9fa; }}
+        tr:hover {{ background: #e8f4f8; }}
+        .status-success {{ color: #27ae60; font-weight: bold; }}
+        .status-error {{ color: #e74c3c; font-weight: bold; }}
+        .footer {{ text-align: center; padding: 20px; color: #7f8c8d; font-size: 12px; border-top: 1px solid #ecf0f1; }}
+        .badge {{ display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }}
+        .badge-success {{ background: #d4edda; color: #155724; }}
+        .badge-error {{ background: #f8d7da; color: #721c24; }}
+        .progress-bar {{ height: 30px; background: #ecf0f1; border-radius: 15px; overflow: hidden; margin: 20px 0; }}
+        .progress-fill {{ height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; transition: width 0.3s; }}
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>📊 Relatório de Organização de Extratos</h1>
-        <p><strong>Data:</strong> {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}</p>
-        <p><strong>Modo:</strong> {'SIMULAÇÃO' if relatorio['modo_teste'] else 'ORGANIZAÇÃO REAL'}</p>
-    </div>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Relatório de Organização - RENOMER</h1>
+            <p><strong>Data:</strong> {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}</p>
+            <p><strong>Modo:</strong> {'🔍 SIMULAÇÃO' if relatorio['modo_teste'] else '✅ ORGANIZAÇÃO REAL'}</p>
+            <p><strong>Sistema:</strong> Organizador de Extratos Bancários</p>
+        </div>
 
-    <div class="stats">
-        <div class="stat-box">
-            <h3>{relatorio['total_arquivos']}</h3>
-            <p>Total de Arquivos</p>
+        <div class="stats">
+            <div class="stat-box">
+                <h3>{relatorio['total_arquivos']}</h3>
+                <p>Total de Arquivos</p>
+            </div>
+            <div class="stat-box success">
+                <h3>{relatorio['processados_com_sucesso']}</h3>
+                <p>Processados</p>
+            </div>
+            <div class="stat-box error">
+                <h3>{relatorio['erros']}</h3>
+                <p>Erros</p>
+            </div>
+            <div class="stat-box">
+                <h3>{taxa_sucesso:.1f}%</h3>
+                <p>Taxa de Sucesso</p>
+            </div>
         </div>
-        <div class="stat-box success">
-            <h3>{relatorio['processados_com_sucesso']}</h3>
-            <p>Sucessos</p>
-        </div>
-        <div class="stat-box error">
-            <h3>{relatorio['erros']}</h3>
-            <p>Erros</p>
-        </div>
-    </div>
 
-    <h2>📋 Detalhes dos Arquivos</h2>
-    <table>
-        <tr>
-            <th>Arquivo Original</th>
-            <th>Status</th>
-            <th>Estrutura de Destino</th>
-            <th>Conta</th>
-            <th>Data</th>
-        </tr>
+        <div class="content">
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {taxa_sucesso}%">{taxa_sucesso:.1f}%</div>
+            </div>
+
+            <h2 class="section-title">📋 Detalhes dos Arquivos</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Arquivo Original</th>
+                        <th>Status</th>
+                        <th>Estrutura de Destino</th>
+                        <th>Conta</th>
+                        <th>Data</th>
+                    </tr>
+                </thead>
+                <tbody>
 """
 
-        for detalhe in relatorio['detalhes']:
+        for idx, detalhe in enumerate(relatorio['detalhes'], 1):
             status_class = "status-success" if detalhe['sucesso'] else "status-error"
+            badge_class = "badge-success" if detalhe['sucesso'] else "badge-error"
             status_text = "✓ Sucesso" if detalhe['sucesso'] else f"✗ {detalhe.get('erro', 'Erro')}"
 
             if detalhe['sucesso']:
@@ -563,20 +682,25 @@ class InterfaceComSeletor:
                 data_str = 'N/A'
 
             html += f"""
-        <tr>
-            <td>{detalhe['nome_original']}</td>
-            <td class="{status_class}">{status_text}</td>
-            <td>{estrutura}</td>
-            <td>{conta}</td>
-            <td>{data_str}</td>
-        </tr>
+                    <tr>
+                        <td><strong>{idx}</strong></td>
+                        <td>{detalhe['nome_original']}</td>
+                        <td><span class="badge {badge_class}">{status_text}</span></td>
+                        <td>{estrutura}</td>
+                        <td>{conta}</td>
+                        <td>{data_str}</td>
+                    </tr>
 """
 
         html += """
-    </table>
+                </tbody>
+            </table>
+        </div>
 
-    <div style="margin-top: 30px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
-        <p><small>Relatório gerado automaticamente pelo Organizador de Extratos</small></p>
+        <div class="footer">
+            <p>📄 Relatório gerado automaticamente pelo RENOMER - Sistema de Organização de Extratos Bancários</p>
+            <p>DEV ALEKSANDRO ALVES</p>
+        </div>
     </div>
 </body>
 </html>

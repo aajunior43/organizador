@@ -6,7 +6,8 @@
       "Bash(timeout 30 python organizador_com_aprovacao.py)",
       "Bash(xargs:*)",
       "Bash(shuf:*)",
-      "Bash(cmd /c:*)"
+      "Bash(cmd /c:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

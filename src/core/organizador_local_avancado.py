@@ -13,7 +13,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
+from functools import lru_cache
+import hashlib
 
 # Adiciona o diretório utils ao path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'utils'))
@@ -21,12 +23,49 @@ from relatorio_manager import relatorio_manager
 
 class OrganizadorLocalAvancado:
     def __init__(self, diretorio_origem: str, diretorio_destino: str):
-        """Inicializa organizador local avançado"""
-        self.diretorio_origem = Path(diretorio_origem)
-        self.diretorio_destino = Path(diretorio_destino)
+        """Inicializa organizador local avançado com validações"""
+        # Valida e sanitiza inputs
+        self.diretorio_origem = self._validar_diretorio(diretorio_origem, "origem")
+        self.diretorio_destino = self._validar_diretorio(diretorio_destino, "destino")
+
+        # Verifica se origem e destino não são iguais
+        if self.diretorio_origem.resolve() == self.diretorio_destino.resolve():
+            raise ValueError("Diretório de origem e destino não podem ser iguais")
+
         self.setup_logging()
 
-        # Padrões avançados para detecção - MELHORADOS baseado em dados reais
+        # Compila padrões regex uma vez para melhor performance
+        self._compilar_padroes()
+
+        # Mapeamento de meses
+        self.meses_nomes = {
+            'JANEIRO': '01', 'JAN': '01',
+            'FEVEREIRO': '02', 'FEV': '02',
+            'MARÇO': '03', 'MARCO': '03', 'MAR': '03',
+            'ABRIL': '04', 'ABR': '04',
+            'MAIO': '05', 'MAI': '05',
+            'JUNHO': '06', 'JUN': '06',
+            'JULHO': '07', 'JUL': '07',
+            'AGOSTO': '08', 'AGO': '08',
+            'SETEMBRO': '09', 'SET': '09',
+            'OUTUBRO': '10', 'OUT': '10',
+            'NOVEMBRO': '11', 'NOV': '11',
+            'DEZEMBRO': '12', 'DEZ': '12'
+        }
+
+        self.stats = {
+            'total_arquivos': 0,
+            'processados': 0,
+            'erros': 0,
+            'data_encontrada': 0,
+            'conta_encontrada': 0
+        }
+
+        # Cache para detecções
+        self._cache_deteccao = {}
+
+    def _compilar_padroes(self):
+        """Compila padrões regex para melhor performance"""
         self.padroes = {
             # Datas em vários formatos
             'data_mm_yyyy': re.compile(r'(\d{1,2})[\/\-\.](\d{4})', re.IGNORECASE),
@@ -62,44 +101,89 @@ class OrganizadorLocalAvancado:
             'ano_2digitos': re.compile(r'(\d{2})(?=\D|$)', re.IGNORECASE),  # 23, 24
         }
 
-        # Mapeamento de meses
-        self.meses_nomes = {
-            'JANEIRO': '01', 'JAN': '01',
-            'FEVEREIRO': '02', 'FEV': '02',
-            'MARÇO': '03', 'MARCO': '03', 'MAR': '03',
-            'ABRIL': '04', 'ABR': '04',
-            'MAIO': '05', 'MAI': '05',
-            'JUNHO': '06', 'JUN': '06',
-            'JULHO': '07', 'JUL': '07',
-            'AGOSTO': '08', 'AGO': '08',
-            'SETEMBRO': '09', 'SET': '09',
-            'OUTUBRO': '10', 'OUT': '10',
-            'NOVEMBRO': '11', 'NOV': '11',
-            'DEZEMBRO': '12', 'DEZ': '12'
-        }
+    def _validar_diretorio(self, caminho: str, tipo: str) -> Path:
+        """Valida e sanitiza caminho de diretório"""
+        if not caminho or not isinstance(caminho, str):
+            raise ValueError(f"Caminho {tipo} inválido: {caminho}")
 
-        self.stats = {
-            'total_arquivos': 0,
-            'processados': 0,
-            'erros': 0,
-            'data_encontrada': 0,
-            'conta_encontrada': 0
-        }
+        # Remove espaços e normaliza
+        caminho = caminho.strip()
+
+        # Converte para Path
+        path_obj = Path(caminho)
+
+        # Verifica se existe (cria destino se não existir)
+        if tipo == "origem":
+            if not path_obj.exists():
+                raise FileNotFoundError(f"Diretório de origem não existe: {caminho}")
+            if not path_obj.is_dir():
+                raise NotADirectoryError(f"Caminho de origem não é um diretório: {caminho}")
+        elif tipo == "destino":
+            # Cria diretório de destino se não existir
+            path_obj.mkdir(parents=True, exist_ok=True)
+
+        # Verifica permissões
+        if not os.access(path_obj, os.R_OK):
+            raise PermissionError(f"Sem permissão de leitura no diretório {tipo}: {caminho}")
+
+        if tipo == "destino" and not os.access(path_obj, os.W_OK):
+            raise PermissionError(f"Sem permissão de escrita no diretório {tipo}: {caminho}")
+
+        return path_obj.resolve()  # Retorna caminho absoluto
 
     def setup_logging(self):
-        """Configura logging"""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler('organizador_local.log', encoding='utf-8'),
-                logging.StreamHandler()
-            ]
+        """Configura logging com rotação de arquivos"""
+        from logging.handlers import RotatingFileHandler
+
+        # Remove handlers existentes para evitar duplicação
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
+
+        # Cria diretório de logs se não existir
+        log_dir = Path('logs')
+        log_dir.mkdir(exist_ok=True)
+
+        # Handler com rotação (max 5MB, mantém 5 arquivos)
+        file_handler = RotatingFileHandler(
+            log_dir / 'organizador_local.log',
+            maxBytes=5*1024*1024,
+            backupCount=5,
+            encoding='utf-8'
         )
+        file_handler.setLevel(logging.DEBUG)
+
+        # Handler para console
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+
+        # Formato detalhado
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+        console_handler.setFormatter(formatter)
+
+        # Configura logger
         self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+        self.logger.addHandler(file_handler)
+        self.logger.addHandler(console_handler)
+
+    def _gerar_cache_key(self, texto: str, contexto: str = "") -> str:
+        """Gera chave única para cache"""
+        conteudo = f"{texto}|{contexto}"
+        return hashlib.md5(conteudo.encode()).hexdigest()
 
     def detectar_data(self, texto: str, caminho_completo: str = "") -> Dict:
-        """Detecta mês e ano no texto usando múltiplos padrões"""
+        """Detecta mês e ano no texto usando múltiplos padrões com cache"""
+        # Verifica cache
+        cache_key = self._gerar_cache_key(texto, caminho_completo)
+        if cache_key in self._cache_deteccao:
+            cached = self._cache_deteccao[cache_key]
+            if 'data' in cached:
+                return cached['data']
+
         # Inclui todo o caminho para pegar ano da pasta pai
         texto_completo = f"{texto} {caminho_completo}".upper()
 
@@ -187,14 +271,28 @@ class OrganizadorLocalAvancado:
         if ano and not (2020 <= int(ano) <= 2030):
             ano = None
 
-        return {
+        resultado = {
             'mes': mes,
             'ano': ano,
             'encontrado': bool(mes and ano)
         }
 
+        # Salva no cache
+        if cache_key not in self._cache_deteccao:
+            self._cache_deteccao[cache_key] = {}
+        self._cache_deteccao[cache_key]['data'] = resultado
+
+        return resultado
+
     def detectar_conta(self, texto: str) -> Dict:
-        """Detecta número da conta usando múltiplos padrões"""
+        """Detecta número da conta usando múltiplos padrões com cache"""
+        # Verifica cache
+        cache_key = self._gerar_cache_key(texto, "conta")
+        if cache_key in self._cache_deteccao:
+            cached = self._cache_deteccao[cache_key]
+            if 'conta' in cached:
+                return cached['conta']
+
         texto_upper = texto.upper()
         conta = None
         metodo = None
@@ -240,23 +338,47 @@ class OrganizadorLocalAvancado:
             conta = None
             metodo = None
 
-        return {
+        resultado = {
             'conta': conta,
             'metodo': metodo,
             'encontrado': bool(conta)
         }
 
+        # Salva no cache
+        if cache_key not in self._cache_deteccao:
+            self._cache_deteccao[cache_key] = {}
+        self._cache_deteccao[cache_key]['conta'] = resultado
+
+        return resultado
+
     def processar_arquivo(self, arquivo: Path, modo_teste: bool = True) -> Dict:
-        """Processa um arquivo individual"""
+        """Processa um arquivo individual com validações robustas"""
         resultado = {
             'arquivo_original': str(arquivo),
             'nome_original': arquivo.name,
             'sucesso': False,
             'erro': None,
-            'detalhes': {}
+            'detalhes': {},
+            'avisos': []
         }
 
         try:
+            # Validações iniciais
+            if not arquivo.exists():
+                raise FileNotFoundError(f"Arquivo não encontrado: {arquivo}")
+
+            if not arquivo.is_file():
+                raise ValueError(f"Caminho não é um arquivo válido: {arquivo}")
+
+            # Verifica tamanho do arquivo
+            tamanho_mb = arquivo.stat().st_size / (1024 * 1024)
+            if tamanho_mb > 100:
+                resultado['avisos'].append(f"Arquivo grande: {tamanho_mb:.2f}MB")
+
+            # Verifica permissões
+            if not os.access(arquivo, os.R_OK):
+                raise PermissionError(f"Sem permissão de leitura: {arquivo}")
+
             self.logger.info(f"Processando: {arquivo.name}")
 
             # Detecta data - passa caminho completo para detectar ano
@@ -309,12 +431,30 @@ class OrganizadorLocalAvancado:
             resultado['estrutura'] = f"{pasta_conta}/{pasta_data}"
 
             if not modo_teste:
-                # Cria diretórios
-                destino_final.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    # Cria diretórios com tratamento de erro
+                    destino_final.parent.mkdir(parents=True, exist_ok=True)
 
-                # Copia arquivo (preserva original)
-                shutil.copy2(str(arquivo), str(destino_final))
-                resultado['acao'] = 'copiado'
+                    # Verifica espaço em disco
+                    stat = os.statvfs(destino_final.parent) if hasattr(os, 'statvfs') else None
+                    if stat:
+                        espaco_livre = stat.f_bavail * stat.f_frsize / (1024 * 1024 * 1024)
+                        if espaco_livre < 1:
+                            raise IOError(f"Espaço em disco insuficiente: {espaco_livre:.2f}GB")
+
+                    # Copia arquivo (preserva original) com verificação
+                    shutil.copy2(str(arquivo), str(destino_final))
+
+                    # Verifica integridade da cópia
+                    if arquivo.stat().st_size != destino_final.stat().st_size:
+                        destino_final.unlink()  # Remove cópia defeituosa
+                        raise IOError("Falha na verificação de integridade da cópia")
+
+                    resultado['acao'] = 'copiado'
+                    resultado['tamanho_bytes'] = arquivo.stat().st_size
+
+                except (OSError, IOError, PermissionError) as e:
+                    raise Exception(f"Erro ao copiar arquivo: {str(e)}")
             else:
                 resultado['acao'] = 'simulado'
 
@@ -329,24 +469,45 @@ class OrganizadorLocalAvancado:
             if not modo_teste:
                 self.logger.info(f"  Arquivo COPIADO (original preservado)")
 
+            # Log avisos se existirem
+            for aviso in resultado['avisos']:
+                self.logger.warning(f"  AVISO: {aviso}")
+
+        except FileNotFoundError as e:
+            resultado['erro'] = f"Arquivo não encontrado: {str(e)}"
+            self.stats['erros'] += 1
+            self.logger.error(f"ERRO FileNotFound: {arquivo.name} - {str(e)}")
+        except PermissionError as e:
+            resultado['erro'] = f"Sem permissão: {str(e)}"
+            self.stats['erros'] += 1
+            self.logger.error(f"ERRO Permission: {arquivo.name} - {str(e)}")
+        except ValueError as e:
+            resultado['erro'] = f"Valor inválido: {str(e)}"
+            self.stats['erros'] += 1
+            self.logger.error(f"ERRO ValueError: {arquivo.name} - {str(e)}")
         except Exception as e:
             resultado['erro'] = str(e)
             self.stats['erros'] += 1
-            self.logger.error(f"ERRO: {arquivo.name} - {str(e)}")
+            self.logger.error(f"ERRO: {arquivo.name} - {str(e)}", exc_info=True)
 
         return resultado
 
-    def organizar_arquivos(self, modo_teste: bool = True) -> Dict:
-        """Organiza todos os arquivos"""
+    def organizar_arquivos(self, modo_teste: bool = True, max_workers: int = 4) -> Dict:
+        """Organiza todos os arquivos com processamento paralelo opcional"""
         self.logger.info("=== ORGANIZACAO LOCAL AVANCADA ===")
         self.logger.info(f"Origem: {self.diretorio_origem}")
         self.logger.info(f"Destino: {self.diretorio_destino}")
         self.logger.info(f"Modo teste: {modo_teste}")
 
-        # Encontra arquivos
+        # Encontra arquivos com progress
+        self.logger.info("Buscando arquivos...")
         arquivos = []
-        for ext in ['*.pdf', '*.ofx']:
-            arquivos.extend(self.diretorio_origem.rglob(ext))
+        extensoes = ['*.pdf', '*.ofx', '*.PDF', '*.OFX']
+        for ext in extensoes:
+            encontrados = list(self.diretorio_origem.rglob(ext))
+            if encontrados:
+                self.logger.info(f"  Encontrados {len(encontrados)} arquivos {ext}")
+            arquivos.extend(encontrados)
 
         self.stats['total_arquivos'] = len(arquivos)
         self.logger.info(f"Total de arquivos: {len(arquivos)}")
