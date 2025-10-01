@@ -860,7 +860,8 @@ class InterfaceRenomerIA:
         self.text_resultado.insert(tk.END, f"✅ Analisados: {resultado['processados']}\n")
         self.text_resultado.insert(tk.END, f"❌ Erros: {resultado['erros']}\n")
         self.text_resultado.insert(tk.END, f"🤖 Com IA: {com_ia}\n\n")
-        self.text_resultado.insert(tk.END, "⚠️ CLIQUE EM 'APLICAR RENOMEAÇÃO' PARA CONFIRMAR\n\n")
+        self.text_resultado.insert(tk.END, "⚠️⚠️⚠️ CLIQUE EM 'APLICAR RENOMEAÇÃO' PARA CONFIRMAR ⚠️⚠️⚠️\n")
+        self.text_resultado.insert(tk.END, "Os arquivos ainda NÃO foram renomeados!\n\n")
 
         for i, r in enumerate(self.preview_renomeacoes, 1):
             ia = "🤖" if r.get('ia_usada') else "📝"
@@ -868,6 +869,10 @@ class InterfaceRenomerIA:
 
         if self.preview_renomeacoes:
             self.btn_aplicar.config(state='normal')
+            messagebox.showinfo("Preview Concluído",
+                              f"✅ {len(self.preview_renomeacoes)} arquivo(s) analisado(s)!\n\n"
+                              "Revise os nomes sugeridos e clique em\n"
+                              "'APLICAR RENOMEAÇÃO' para confirmar.")
 
     def processar_resultado_aplicacao(self, resultado):
         """Processa resultado da aplicação"""
