@@ -47,9 +47,13 @@ nul
 *.backup
 *~
 
-# Executáveis (permitir apenas o portátil)
-*.exe
-!dist/RENOMER_Portable.exe
-
 # Build temporários
 build/
+venv/
+*.spec
+
+# Arquivos de progresso
+.renomer_progress.json
+
+# Claude
+.claude/
