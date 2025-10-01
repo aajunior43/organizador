@@ -29,15 +29,11 @@
 - ✅ **Interface gráfica** intuitiva
 - ✅ **Processamento em lote** de milhares de arquivos
 
-## 📦 Downloads
+## 📦 Download
 
-Acesse a pasta [dist/](dist/) para baixar os executáveis:
+**[RENOMER_IA_v3.exe](dist/RENOMER_IA_v3.exe)** (59 MB) - Versão final completa
 
-- **RENOMER_IA_v3.exe** (59 MB) - ⭐ **RECOMENDADO** - Versão completa com 2 modos
-- **RENOMER_IA_v2.exe** (59 MB) - Apenas modo extratos com log
-- **RENOMER_IA.exe** (31 MB) - Versão simples
-- **RENOMER.exe** (29 MB) - Sem IA, apenas regex
-- **RENOMER_Portable.exe** (18 MB) - Versão antiga
+⭐ **2 modos em 1**: Extratos Bancários + Genérico
 
 ## 🚀 Como Usar
 
@@ -121,8 +117,8 @@ C:\Documentos\Organizados\
 
 ```bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/RENOMER.git
-cd RENOMER
+git clone https://github.com/aajunior43/organizador.git
+cd organizador
 
 # Instale dependências
 pip install -r requirements.txt
@@ -135,17 +131,14 @@ python renomer_ia_v3.py
 
 ```
 RENOMER/
-├── dist/                    # Executáveis
-│   ├── RENOMER_IA_v3.exe   # Versão final
-│   └── ...
-├── src/                     # Código fonte original
-├── config/                  # Configurações
-├── docs/                    # Documentação
-├── renomer_ia_v3.py        # Código principal v3
-├── requirements.txt        # Dependências Python
-├── README.md              # Este arquivo
-├── README_v3_FINAL.md     # Documentação completa
-└── build_*.bat            # Scripts de build
+├── dist/
+│   └── RENOMER_IA_v3.exe      # Executável final
+├── src/                        # Código fonte original
+├── config/                     # Configurações
+├── docs/                       # Documentação
+├── renomer_ia_v3.py           # Código principal
+├── requirements.txt           # Dependências
+└── README.md                  # Este arquivo
 ```
 
 ## 📊 Performance
@@ -157,14 +150,18 @@ RENOMER/
 | Precisão IA | 99.7% (extratos) / 95% (genérico) |
 | Volume testado | 3480+ arquivos |
 
-## 🆚 Comparação de Versões
+## ⚡ Recursos da v3
 
-| Versão | Tamanho | Modos | Log | Delay | Recomendado |
-|--------|---------|-------|-----|-------|-------------|
-| v3 ⭐ | 59 MB | 2 (extratos + genérico) | ✅ | ✅ | **Sim** |
-| v2 | 59 MB | 1 (apenas extratos) | ✅ | ✅ | Não |
-| v1 | 31 MB | 1 (apenas extratos) | ❌ | ❌ | Não |
-| Básico | 29 MB | Regex (sem IA) | ❌ | ❌ | Não |
+| Recurso | Status |
+|---------|--------|
+| 2 Modos (Extratos + Genérico) | ✅ |
+| Google Gemini AI | ✅ |
+| Log de Progresso | ✅ |
+| Retomada Automática | ✅ |
+| Delay Configurável | ✅ |
+| Busca Recursiva | ✅ |
+| Modo Teste | ✅ |
+| Interface Gráfica | ✅ |
 
 ## 💡 Dicas
 
@@ -192,12 +189,6 @@ RENOMER/
 **"IA não configurada"**
 - Verifique a API key
 - Teste em https://aistudio.google.com/
-
-## 📖 Documentação
-
-- [README_v3_FINAL.md](README_v3_FINAL.md) - Documentação completa
-- [README_v2.md](README_v2.md) - Documentação v2
-- [README_IA.md](README_IA.md) - Documentação v1
 
 ## 🤝 Contribuindo
 
@@ -229,4 +220,4 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para ma
 
 **Desenvolvido com ❤️ e Google Gemini AI**
 
-Para dúvidas ou sugestões, abra uma [issue](https://github.com/seu-usuario/RENOMER/issues).
+Para dúvidas ou sugestões, abra uma [issue](https://github.com/aajunior43/organizador/issues).
